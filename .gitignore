@@ -1,5 +1,6 @@
 .env
 historico.json
+ultimo_lote.json
 __pycache__/
 *.pyc
 *.pyo

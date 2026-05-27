@@ -10,10 +10,12 @@ import os
 import re
 import sys
 import json
+import time
 import base64
 import hashlib
 import smtplib
 import tempfile
+import subprocess
 import requests
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -42,8 +44,40 @@ EMAIL_SMTP_HOST   = os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com")
 EMAIL_SMTP_PORT   = int(os.getenv("EMAIL_SMTP_PORT", "587"))
 
 AUDIO_LANG        = os.getenv("AUDIO_LANG", "en")
+ANKI_EXE          = os.getenv("ANKI_EXE", r"C:\Program Files\Anki\anki.exe")
 HISTORICO_PATH    = os.path.join(os.path.dirname(__file__), "historico.json")
+ULTIMO_LOTE_PATH  = os.path.join(os.path.dirname(__file__), "ultimo_lote.json")
 # ─────────────────────────────────────────
+
+
+def garantir_anki_aberto(timeout=30):
+    def anki_online():
+        try:
+            r = requests.post(ANKI_URL, json={"action": "version", "version": 6}, timeout=3)
+            return r.status_code == 200
+        except Exception:
+            return False
+
+    if anki_online():
+        print("✅ Anki já está aberto.")
+        return
+
+    print("🔍 Anki não encontrado. Tentando abrir...")
+    if os.path.exists(ANKI_EXE):
+        subprocess.Popen([ANKI_EXE])
+    else:
+        print(f"⚠️  Executável não encontrado em: {ANKI_EXE}")
+        print("   Ajuste ANKI_EXE no .env ou abra o Anki manualmente.")
+
+    print(f"⏳ Aguardando AnkiConnect subir (até {timeout}s)...")
+    for _ in range(timeout // 2):
+        time.sleep(2)
+        if anki_online():
+            print("✅ Anki pronto.")
+            return
+
+    print("❌ AnkiConnect não respondeu. Verifique se o Anki está aberto e o add-on instalado.")
+    sys.exit(1)
 
 
 SYSTEM_PROMPT = """\
@@ -391,7 +425,10 @@ if __name__ == "__main__":
     print(f"  anki-daily · {date.today()}")
     print(f"{'='*50}\n")
 
+    garantir_anki_aberto()
     data = gerar_conteudo()
+    with open(ULTIMO_LOTE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
     criar_cards(data)
     salvar_historico(data)
     html = montar_html(data)
